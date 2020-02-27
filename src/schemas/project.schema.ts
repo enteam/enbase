@@ -10,4 +10,5 @@ export const ProjectSchema = new mongoose.Schema({
       appSecret: String,
     },
   },
+  deploymentId: String,
 });

@@ -1,6 +1,6 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, OnModuleInit, Logger } from '@nestjs/common';
 import { Deployment, DeploymentDocument, DeploymentInstance } from '../interfaces/deployment.interface';
-import { ProjectDocument } from '../interfaces/project.interface';
+import { Project, ProjectDocument } from '../interfaces/project.interface';
 import { AdminDocument } from '../interfaces/admin.interface';
 import { Model, Types, Document } from 'mongoose';
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
@@ -11,7 +11,8 @@ import { promisify } from 'util';
 const exec = promisify(require('child_process').exec);
 
 @Injectable()
-export class DeploymentsService {
+export class DeploymentsService implements OnModuleInit {
+  private readonly logger = new Logger(DeploymentsService.name);
 
   static instances: Array<DeploymentInstance> = [];
 
@@ -33,7 +34,7 @@ export class DeploymentsService {
     deployment.logs = '';
     deployment.archive = code.buffer.toString('base64');
     await deployment.save();
-    this.deliver(deployment._id);
+    this.deliver(deployment._id, projectId, admin._id);
     deployment.archive = null;
     return deployment;
   }
@@ -44,7 +45,25 @@ export class DeploymentsService {
     return await this.deploymentModel.find({ projectId: projectId });
   }
 
-  async deliver(id: string): Promise<void> {
+  async onModuleInit() {
+    await this.mountAllProjects();
+  }
+
+  private async mountAllProjects() {
+    const projects = await this.projectModel.find();
+    for (const project of projects) {
+      if (project.deploymentId != null) {
+        this.deliver(project.deploymentId, project._id, project.userId);
+      }
+    }
+  }
+
+  async deliver(id: string, projectId: string, adminId: string): Promise<void> {
+    this.logger.log(`Mounting cloud code for project: ${projectId}`);
+    const project: Project & Document = await this.projectModel.findOne({
+      _id: Types.ObjectId(projectId),
+      userId: adminId,
+    });
     const deployment: Deployment & Document = await this.deploymentModel.findOne({ _id: Types.ObjectId(id) });
     const workspace = process.cwd();
     this.ensureDirectoryExists(join(workspace, 'functions'));
@@ -70,6 +89,8 @@ export class DeploymentsService {
     deployment.status = 'mounted';
     deployment.finishTime = new Date();
     await deployment.save();
+    project.deploymentId = deployment._id.toHexString();
+    await project.save();
   }
 
   private async mount(deployment: Deployment & Document, path: string): Promise<void> {
