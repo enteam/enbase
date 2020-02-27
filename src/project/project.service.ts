@@ -23,6 +23,7 @@ export class ProjectService {
   }
 
   async edit(admin: AdminDocument, project: Project, id: string): Promise<Project> {
+    project.userId = admin._id;
     await this.projectModel.update({ _id: Types.ObjectId(id), userId: admin._id }, project);
     return project;
   }

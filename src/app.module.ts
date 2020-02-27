@@ -15,10 +15,15 @@ import { DatabaseService } from './database/database.service';
 import { DatabaseController } from './database/database.controller';
 import { UserService } from './user/user.service';
 import { UserController } from './user/user.controller';
+import { DeploymentsService } from './deployments/deployments.service';
+import { DeploymentsController } from './deployments/deployments.controller';
+import { DeploymentSchema } from './schemas/deployment.schema';
+import { FunctionsService } from './functions/functions.service';
+import { FunctionsController } from './functions/functions.controller';
 
 @Module({
   imports: [ConfigModule.forRoot(), JwtModule.register({ secret: 'hard!to-guess_secret' })],
-  controllers: [AppController, AuthController, ProjectController, DatabaseController, UserController],
+  controllers: [AppController, AuthController, ProjectController, DatabaseController, UserController, DeploymentsController, FunctionsController],
   providers: [AppService, ...databaseProviders, AuthService, {
     provide: 'ADMIN_MODEL',
     useFactory: (connection) => connection.model('Admin', AdminSchema),
@@ -27,7 +32,11 @@ import { UserController } from './user/user.controller';
     provide: 'PROJECT_MODEL',
     useFactory: (connection) => connection.model('Project', ProjectSchema),
     inject: ['DATABASE_CONNECTION'],
-  }, ProjectService, DatabaseService, UserService],
+  }, {
+    provide: 'DEPLOYMENT_MODEL',
+    useFactory: (connection) => connection.model('Deployment', DeploymentSchema),
+    inject: ['DATABASE_CONNECTION'],
+  }, ProjectService, DatabaseService, UserService, DeploymentsService, FunctionsService],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
