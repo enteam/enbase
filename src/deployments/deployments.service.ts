@@ -51,11 +51,13 @@ export class DeploymentsService implements OnModuleInit {
 
   private async mountAllProjects() {
     const projects = await this.projectModel.find();
+    const promises = [];
     for (const project of projects) {
       if (project.deploymentId != null) {
-        this.deliver(project.deploymentId, project._id, project.userId);
+        promises.push(this.deliver(project.deploymentId, project._id, project.userId));
       }
     }
+    await Promise.all(promises);
   }
 
   async deliver(id: string, projectId: string, adminId: string): Promise<void> {
@@ -104,6 +106,16 @@ export class DeploymentsService implements OnModuleInit {
           instance.projectId = deployment.projectId;
           instance.name = name;
           instance.type = 'function';
+          instance.handler = handler;
+          DeploymentsService.instances.push(instance);
+        },
+      },
+      jobs: {
+        define(name, handler) {
+          const instance = new DeploymentInstance();
+          instance.projectId = deployment.projectId;
+          instance.name = name;
+          instance.type = 'job';
           instance.handler = handler;
           DeploymentsService.instances.push(instance);
         },

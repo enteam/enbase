@@ -14,7 +14,7 @@ export class DatabaseService {
     const iterator = await this.connection.connection.useDb(projectId).collection(collection).find(query);
     const schema = (await this.getProject(projectId)).databaseSchema.collections.find(x => x.name == collection);
     if (schema == null) throw new NotFoundException('collection not found');
-    if (!schema.publicReadAccess) throw new ForbiddenException('public read is denied');
+    if (auth != 'root' && !schema.publicReadAccess) throw new ForbiddenException('public read is denied');
     let doc: ObjectDocument = await iterator.next();
     const documents: Array<ObjectDocument> = [];
     while (doc != null) {
@@ -65,7 +65,7 @@ export class DatabaseService {
   async update(collection: string, documents: [any], projectId: string, auth: string): Promise<Array<ObjectDocument>> {
     const schema = (await this.getProject(projectId)).databaseSchema.collections.find(x => x.name == collection);
     if (schema == null) throw new NotFoundException('collection not found');
-    if (schema.publicUpdateAccess) {
+    if (auth == 'root' || schema.publicUpdateAccess) {
       let valid = true;
       const insertables = [];
       for (const document of documents) {
@@ -103,7 +103,7 @@ export class DatabaseService {
   async delete(collection: string, documents: [any], projectId: string, auth: string): Promise<Array<ObjectDocument>> {
     const schema = (await this.getProject(projectId)).databaseSchema.collections.find(x => x.name == collection);
     if (schema == null) throw new NotFoundException('collection not found');
-    if (schema.publicDeleteAccess) {
+    if (auth == 'root' || schema.publicDeleteAccess) {
       const insertables = [];
       for (const document of documents) {
         const classDocument = new ObjectDocument() as ObjectDocument & { [key: string]: string };
