@@ -98,6 +98,8 @@ export class Project {
   databaseSchema: DatabaseSchema;
   @ApiProperty()
   loginOptions: LoginOptions;
+  @ApiProperty()
+  deploymentId: string;
 }
 
 export class ProjectDocument extends Document implements Project {
@@ -105,4 +107,5 @@ export class ProjectDocument extends Document implements Project {
   loginOptions: LoginOptions;
   name: string;
   userId: string;
+  deploymentId: string;
 }

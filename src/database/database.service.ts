@@ -1,20 +1,45 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { Document, Connection, Model, Types, Mongoose } from 'mongoose';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+  OnModuleInit,
+} from '@nestjs/common';
+import { Model, Mongoose, Types } from 'mongoose';
 import { Project, ProjectDocument } from '../interfaces/project.interface';
 import { validate } from 'class-validator';
 import { ObjectDocument } from './document.interface';
 import * as _ from 'lodash';
+import * as PubSub from 'node-redis-pubsub';
+import { DatabaseEvent, DatabaseEventType } from '../events/database.event';
+import { ObjectId } from 'bson';
 
 @Injectable()
-export class DatabaseService {
+export class DatabaseService implements OnModuleInit {
   constructor(@Inject('DATABASE_CONNECTION') private readonly connection: Mongoose, @Inject('PROJECT_MODEL') private readonly projectModel: Model<ProjectDocument>) {
+  }
+
+  private messenger: any;
+
+  onModuleInit() {
+    this.messenger = PubSub({
+      url: process.env.REDIS_URI,
+    });
+    this.messenger.on('database_event', (data: DatabaseEvent, channel) => {
+      this.onDatabaseEvent(data);
+    });
+  }
+
+  async onDatabaseEvent(event: DatabaseEvent) {
+    console.log(event);
   }
 
   async index(collection: string, query: any, projectId: string, auth: string): Promise<Array<ObjectDocument>> {
     const iterator = await this.connection.connection.useDb(projectId).collection(collection).find(query);
     const schema = (await this.getProject(projectId)).databaseSchema.collections.find(x => x.name == collection);
     if (schema == null) throw new NotFoundException('collection not found');
-    if (!schema.publicReadAccess) throw new ForbiddenException('public read is denied');
+    if (auth != 'root' && !schema.publicReadAccess) throw new ForbiddenException('public read is denied');
     let doc: ObjectDocument = await iterator.next();
     const documents: Array<ObjectDocument> = [];
     while (doc != null) {
@@ -32,10 +57,10 @@ export class DatabaseService {
     return documents;
   }
 
-  async insert(collection: string, documents: [any], projectId: string): Promise<Array<ObjectDocument>> {
+  async insert(collection: string, documents: [any], projectId: string, auth?: string): Promise<Array<ObjectDocument>> {
     const schema = (await this.getProject(projectId)).databaseSchema.collections.find(x => x.name == collection);
     if (schema == null) throw new NotFoundException('collection not found');
-    if (schema.publicWriteAccess) {
+    if (auth == 'root' || schema.publicWriteAccess) {
       let valid = true;
       const insertables = [];
       for (const document of documents) {
@@ -44,12 +69,14 @@ export class DatabaseService {
         for (const field of schema.fields) {
           classDocument[field.name] = '';
         }
+        document._id = new ObjectId();
         const insertable = _.pick(document, ['acl', ...schema.fields.map(x => x.name), '_id']);
         for (const field of schema.fields) {
           if (field.required && !insertable.hasOwnProperty(field.name)) insertable[field.name] = '';
           if (typeof insertable[field.name] === 'object') insertable[field.name] = '';
           if (typeof insertable[field.name] !== field.type) insertable[field.name] = '';
         }
+        this.messenger.emit('database_event', new DatabaseEvent(projectId, (new Date()).getTime() / 1000, DatabaseEventType.INSERT, insertable, collection));
         insertables.push(insertable);
         if ((await validate(classDocument)).length > 0) valid = false;
       }
@@ -65,7 +92,7 @@ export class DatabaseService {
   async update(collection: string, documents: [any], projectId: string, auth: string): Promise<Array<ObjectDocument>> {
     const schema = (await this.getProject(projectId)).databaseSchema.collections.find(x => x.name == collection);
     if (schema == null) throw new NotFoundException('collection not found');
-    if (schema.publicUpdateAccess) {
+    if (auth == 'root' || schema.publicUpdateAccess) {
       let valid = true;
       const insertables = [];
       for (const document of documents) {
@@ -82,6 +109,7 @@ export class DatabaseService {
             if (typeof insertable[field.name] !== field.type) insertable[field.name] = '';
           }
           insertable._id = document._id;
+          this.messenger.emit('database_event', new DatabaseEvent(projectId, (new Date()).getTime() / 1000, DatabaseEventType.UPDATE, insertable, collection));
           insertables.push(insertable);
           if ((await validate(classDocument)).length > 0) valid = false;
         }
@@ -103,7 +131,7 @@ export class DatabaseService {
   async delete(collection: string, documents: [any], projectId: string, auth: string): Promise<Array<ObjectDocument>> {
     const schema = (await this.getProject(projectId)).databaseSchema.collections.find(x => x.name == collection);
     if (schema == null) throw new NotFoundException('collection not found');
-    if (schema.publicDeleteAccess) {
+    if (auth == 'root' || schema.publicDeleteAccess) {
       const insertables = [];
       for (const document of documents) {
         const classDocument = new ObjectDocument() as ObjectDocument & { [key: string]: string };
@@ -112,6 +140,7 @@ export class DatabaseService {
       }
       const output = [];
       for (const insertable of insertables) {
+        this.messenger.emit('database_event', new DatabaseEvent(projectId, (new Date()).getTime() / 1000, DatabaseEventType.DELETE, insertable, collection));
         (await this.connection.connection.useDb(projectId).collection(collection).deleteOne({
           _id: Types.ObjectId(insertable._id),
         }));
