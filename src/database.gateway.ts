@@ -35,7 +35,12 @@ export class DatabaseGateway implements OnGatewayDisconnect, OnModuleInit, OnGat
   private subscriptions: Array<DatabaseSubscription> = [];
 
   @SubscribeMessage('subscribe')
-  subscribeDatabase(@ConnectedSocket() socket: any, @MessageBody() payload: DatabaseSubscription): WsResponse<DatabaseSubscription> {
+  async subscribeDatabase(@ConnectedSocket() socket: any, @MessageBody() payload: DatabaseSubscription): WsResponse<DatabaseSubscription> {
+    let owner = 'anonymous';
+    if (await this.jwtService.verifyAsync(payload.token)) {
+      owner = this.jwtService.decode(payload.token)['_id'];
+    }
+    payload.auth = owner;
     payload.socket = socket;
     payload.id = (new ObjectId()).toHexString();
     this.subscriptions.push(payload);
