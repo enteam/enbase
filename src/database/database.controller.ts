@@ -24,7 +24,7 @@ export class DatabaseController {
   @Get(':collection')
   @ApiBearerAuth()
   async index(@Req() req: any, @Param('projectId') projectId: string, @Param('collection') collection: string): Promise<Array<ObjectDocument>> {
-    return this.databaseService.index(collection, {}, projectId, this.getOwner(req));
+    return this.databaseService.index(collection, {}, projectId, await this.getOwner(req));
   }
 
   @Post(':collection')
@@ -36,13 +36,13 @@ export class DatabaseController {
   @Put(':collection')
   @ApiBody({ type: [ObjectDocument] })
   async update(@Param('projectId') projectId: string, @Param('collection') collection: string, @Body() documents: [ObjectDocument]): Promise<Array<ObjectDocument>> {
-    return this.databaseService.update(collection, documents, projectId, this.getOwner(req));
+    return this.databaseService.update(collection, documents, projectId, await this.getOwner(req));
   }
 
   @Delete(':collection')
   @ApiBody({ type: [ObjectDocument] })
   async delete(@Param('projectId') projectId: string, @Param('collection') collection: string, @Body() documents: [ObjectDocument]): Promise<Array<ObjectDocument>> {
-    return this.databaseService.delete(collection, documents, projectId, this.getOwner(req));
+    return this.databaseService.delete(collection, documents, projectId, await this.getOwner(req));
   }
 
 }

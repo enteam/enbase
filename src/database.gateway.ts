@@ -29,13 +29,13 @@ export class DatabaseSubscription {
 @WebSocketGateway({ path: '/subscriptions/database' })
 export class DatabaseGateway implements OnGatewayDisconnect, OnModuleInit, OnGatewayConnection {
 
-  constructor(private readonly databaseService: DatabaseService) {
+  constructor(private readonly databaseService: DatabaseService, private readonly jwtService: JwtService) {
   }
 
   private subscriptions: Array<DatabaseSubscription> = [];
 
   @SubscribeMessage('subscribe')
-  async subscribeDatabase(@ConnectedSocket() socket: any, @MessageBody() payload: DatabaseSubscription): WsResponse<DatabaseSubscription> {
+  async subscribeDatabase(@ConnectedSocket() socket: any, @MessageBody() payload: DatabaseSubscription): Promise<WsResponse<DatabaseSubscription>> {
     let owner = 'anonymous';
     if (await this.jwtService.verifyAsync(payload.token)) {
       owner = this.jwtService.decode(payload.token)['_id'];
@@ -64,9 +64,11 @@ export class DatabaseGateway implements OnGatewayDisconnect, OnModuleInit, OnGat
   }
 
   notify(event: DatabaseEvent) {
-    this.subscriptions.forEach(subscription => {
+    this.subscriptions.forEach(async subscription => {
       // TODO implement auth validation
       if (subscription.projectId == event.projectId && subscription.type.toString() == event.type.toString() && subscription.collection == event.collection) {
+        const schema = (await this.getProject(projectId)).databaseSchema.collections.find(x => x.name == collection);
+        if (schema == null) throw new NotFoundException('collection not found');
         subscription.socket.emit('database', event);
       }
     });
