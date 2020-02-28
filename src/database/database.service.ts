@@ -1,13 +1,38 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { Document, Connection, Model, Types, Mongoose } from 'mongoose';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+  OnModuleInit,
+} from '@nestjs/common';
+import { Model, Mongoose, Types } from 'mongoose';
 import { Project, ProjectDocument } from '../interfaces/project.interface';
 import { validate } from 'class-validator';
 import { ObjectDocument } from './document.interface';
 import * as _ from 'lodash';
+import * as PubSub from 'node-redis-pubsub';
+import { DatabaseEvent, DatabaseEventType } from '../events/database.event';
+import { ObjectId } from 'bson';
 
 @Injectable()
-export class DatabaseService {
+export class DatabaseService implements OnModuleInit {
   constructor(@Inject('DATABASE_CONNECTION') private readonly connection: Mongoose, @Inject('PROJECT_MODEL') private readonly projectModel: Model<ProjectDocument>) {
+  }
+
+  private messenger: any;
+
+  onModuleInit() {
+    this.messenger = PubSub({
+      url: process.env.REDIS_URI,
+    });
+    this.messenger.on('database_event', (data: DatabaseEvent, channel) => {
+      this.onDatabaseEvent(data);
+    });
+  }
+
+  async onDatabaseEvent(event: DatabaseEvent) {
+    console.log(event);
   }
 
   async index(collection: string, query: any, projectId: string, auth: string): Promise<Array<ObjectDocument>> {
@@ -44,12 +69,14 @@ export class DatabaseService {
         for (const field of schema.fields) {
           classDocument[field.name] = '';
         }
+        document._id = new ObjectId();
         const insertable = _.pick(document, ['acl', ...schema.fields.map(x => x.name), '_id']);
         for (const field of schema.fields) {
           if (field.required && !insertable.hasOwnProperty(field.name)) insertable[field.name] = '';
           if (typeof insertable[field.name] === 'object') insertable[field.name] = '';
           if (typeof insertable[field.name] !== field.type) insertable[field.name] = '';
         }
+        this.messenger.emit('database_event', new DatabaseEvent(projectId, (new Date()).getTime() / 1000, DatabaseEventType.INSERT, insertable, collection));
         insertables.push(insertable);
         if ((await validate(classDocument)).length > 0) valid = false;
       }
@@ -82,6 +109,7 @@ export class DatabaseService {
             if (typeof insertable[field.name] !== field.type) insertable[field.name] = '';
           }
           insertable._id = document._id;
+          this.messenger.emit('database_event', new DatabaseEvent(projectId, (new Date()).getTime() / 1000, DatabaseEventType.UPDATE, insertable, collection));
           insertables.push(insertable);
           if ((await validate(classDocument)).length > 0) valid = false;
         }
@@ -112,6 +140,7 @@ export class DatabaseService {
       }
       const output = [];
       for (const insertable of insertables) {
+        this.messenger.emit('database_event', new DatabaseEvent(projectId, (new Date()).getTime() / 1000, DatabaseEventType.DELETE, insertable, collection));
         (await this.connection.connection.useDb(projectId).collection(collection).deleteOne({
           _id: Types.ObjectId(insertable._id),
         }));
