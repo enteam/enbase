@@ -2,11 +2,12 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Req } from '@ne
 import { ProjectService } from './project.service';
 import { Project } from '../interfaces/project.interface';
 import { ApiBearerAuth } from '@nestjs/swagger';
+import { DatabaseService } from '../database/database.service';
 
 @Controller('admin/projects')
 @ApiBearerAuth()
 export class ProjectController {
-  constructor(private readonly projectService: ProjectService) {
+  constructor(private readonly projectService: ProjectService, private readonly databaseService: DatabaseService) {
   }
 
   @Get()
@@ -28,5 +29,10 @@ export class ProjectController {
   @Delete(':id')
   async remove(@Req() req: any, @Param('id') id: string) {
     return this.projectService.remove(req.user, id);
+  }
+
+  @Get(':id/jobs')
+  async indexJobs(@Param('id') id: string) {
+    return this.databaseService.index('jobs', {}, id, 'root');
   }
 }
