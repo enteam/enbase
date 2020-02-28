@@ -41,7 +41,6 @@ export class DatabaseService implements OnModuleInit {
     const iterator = await this.connection.connection.useDb(projectId).collection(collection).find(query);
     const schema = (await this.getProject(projectId)).databaseSchema.collections.find(x => x.name == collection);
     if (schema == null) throw new NotFoundException('collection not found');
-    if (auth != 'root' && !schema.publicReadAccess) throw new ForbiddenException('public read is denied');
     let doc: ObjectDocument = await iterator.next();
     const documents: Array<ObjectDocument> = [];
     while (doc != null) {

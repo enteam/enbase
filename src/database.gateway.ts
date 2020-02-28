@@ -11,9 +11,11 @@ import {
 import { DatabaseService } from './database/database.service';
 import { DatabaseEvent } from './events/database.event';
 import { remove } from 'lodash';
-import { OnModuleInit } from '@nestjs/common';
+import { OnModuleInit, Inject } from '@nestjs/common';
 import { ObjectId } from 'bson';
 import { JwtService } from '@nestjs/jwt';
+import { Project, ProjectDocument } from './interfaces/project.interface';
+import { Types, Model } from 'mongoose';
 
 export class DatabaseSubscription {
   projectId: string;
@@ -28,9 +30,9 @@ export class DatabaseSubscription {
 }
 
 @WebSocketGateway({ path: '/subscriptions/database' })
-export class DatabaseGateway implements OnGatewayDisconnect, OnModuleInit, OnGatewayConnection {
+export class DatabaseGateway implements OnGatewayDisconnect, OnModuleInit {
 
-  constructor(private readonly databaseService: DatabaseService, private readonly jwtService: JwtService) {
+  constructor(private readonly databaseService: DatabaseService, private readonly jwtService: JwtService, @Inject('PROJECT_MODEL') private readonly projectModel: Model<ProjectDocument>) {
   }
 
   private subscriptions: Array<DatabaseSubscription> = [];
@@ -38,9 +40,10 @@ export class DatabaseGateway implements OnGatewayDisconnect, OnModuleInit, OnGat
   @SubscribeMessage('subscribe')
   async subscribeDatabase(@ConnectedSocket() socket: any, @MessageBody() payload: DatabaseSubscription): Promise<WsResponse<DatabaseSubscription>> {
     let owner = 'anonymous';
-    if (await this.jwtService.verifyAsync(payload.token)) {
-      owner = this.jwtService.decode(payload.token)['_id'];
-    }
+    if (payload.token != null)
+      if (await this.jwtService.verifyAsync(payload.token)) {
+        owner = this.jwtService.decode(payload.token)['_id'];
+      }
     payload.auth = owner;
     payload.socket = socket;
     payload.id = (new ObjectId()).toHexString();
@@ -67,18 +70,24 @@ export class DatabaseGateway implements OnGatewayDisconnect, OnModuleInit, OnGat
   notify(event: DatabaseEvent) {
     this.subscriptions.forEach(async subscription => {
       // TODO implement auth validation
-      if (subscription.projectId == event.projectId && subscription.type.toString() == event.type.toString() && subscription.collection == event.collection) {
-        const schema = (await this.getProject(event.projectId)).databaseSchema.collections.find(x => x.name == event.collection);
-        if (schema != null) {
-          if (schema.publicReadAccesc) {
-            subscription.socket.emit('database', event);
+      try {
+        const doc: any = event.payload;
+        if (subscription.projectId == event.projectId && subscription.type.toString() == event.type.toString() && subscription.collection == event.collection) {
+          const project = await this.projectModel.findOne({
+            _id: Types.ObjectId(event.projectId),
+          }).lean();
+          if (project != null) {
+            const schema = (project as any).databaseSchema.collections.find(x => x.name == event.collection);
+            if (schema != null) {
+              if (doc.acl.find(x => x.owner == subscription.auth).read)
+                subscription.socket.emit('database', event);
+            }
           }
         }
+      } catch (err) {
+        
       }
     });
   }
 
-  handleConnection(client: any, ...args: any[]): any {
-    console.log('connected');
-  }
 }
