@@ -20,6 +20,7 @@ import { DeploymentsController } from './deployments/deployments.controller';
 import { DeploymentSchema } from './schemas/deployment.schema';
 import { FunctionsService } from './functions/functions.service';
 import { FunctionsController } from './functions/functions.controller';
+import { DatabaseGateway } from './database.gateway';
 
 @Module({
   imports: [ConfigModule.forRoot(), JwtModule.register({ secret: 'hard!to-guess_secret' })],
@@ -36,7 +37,7 @@ import { FunctionsController } from './functions/functions.controller';
     provide: 'DEPLOYMENT_MODEL',
     useFactory: (connection) => connection.model('Deployment', DeploymentSchema),
     inject: ['DATABASE_CONNECTION'],
-  }, ProjectService, DatabaseService, UserService, DeploymentsService, FunctionsService],
+  }, ProjectService, DatabaseService, UserService, DeploymentsService, FunctionsService, DatabaseGateway],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
