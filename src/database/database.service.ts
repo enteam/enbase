@@ -32,10 +32,10 @@ export class DatabaseService {
     return documents;
   }
 
-  async insert(collection: string, documents: [any], projectId: string): Promise<Array<ObjectDocument>> {
+  async insert(collection: string, documents: [any], projectId: string, auth?: string): Promise<Array<ObjectDocument>> {
     const schema = (await this.getProject(projectId)).databaseSchema.collections.find(x => x.name == collection);
     if (schema == null) throw new NotFoundException('collection not found');
-    if (schema.publicWriteAccess) {
+    if (auth == 'root' || schema.publicWriteAccess) {
       let valid = true;
       const insertables = [];
       for (const document of documents) {
