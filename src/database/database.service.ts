@@ -12,8 +12,9 @@ import { validate } from 'class-validator';
 import { ObjectDocument } from './document.interface';
 import * as _ from 'lodash';
 import * as PubSub from 'node-redis-pubsub';
-import { DatabaseEvent, DatabaseEventType } from '../events/database.event';
+import { DatabaseEvent } from '../events/database.event';
 import { ObjectId } from 'bson';
+import { DatabaseGateway } from '../database.gateway';
 
 @Injectable()
 export class DatabaseService implements OnModuleInit {
@@ -21,6 +22,7 @@ export class DatabaseService implements OnModuleInit {
   }
 
   private messenger: any;
+  public databaseGateway: DatabaseGateway;
 
   onModuleInit() {
     this.messenger = PubSub({
@@ -32,7 +34,7 @@ export class DatabaseService implements OnModuleInit {
   }
 
   async onDatabaseEvent(event: DatabaseEvent) {
-    console.log(event);
+    this.databaseGateway.notify(event);
   }
 
   async index(collection: string, query: any, projectId: string, auth: string): Promise<Array<ObjectDocument>> {
@@ -76,7 +78,7 @@ export class DatabaseService implements OnModuleInit {
           if (typeof insertable[field.name] === 'object') insertable[field.name] = '';
           if (typeof insertable[field.name] !== field.type) insertable[field.name] = '';
         }
-        this.messenger.emit('database_event', new DatabaseEvent(projectId, (new Date()).getTime() / 1000, DatabaseEventType.INSERT, insertable, collection));
+        this.messenger.emit('database_event', new DatabaseEvent(projectId, (new Date()).getTime() / 1000, 'INSERT', insertable, collection));
         insertables.push(insertable);
         if ((await validate(classDocument)).length > 0) valid = false;
       }
@@ -109,7 +111,7 @@ export class DatabaseService implements OnModuleInit {
             if (typeof insertable[field.name] !== field.type) insertable[field.name] = '';
           }
           insertable._id = document._id;
-          this.messenger.emit('database_event', new DatabaseEvent(projectId, (new Date()).getTime() / 1000, DatabaseEventType.UPDATE, insertable, collection));
+          this.messenger.emit('database_event', new DatabaseEvent(projectId, (new Date()).getTime() / 1000, 'UPDATE', insertable, collection));
           insertables.push(insertable);
           if ((await validate(classDocument)).length > 0) valid = false;
         }
@@ -140,7 +142,7 @@ export class DatabaseService implements OnModuleInit {
       }
       const output = [];
       for (const insertable of insertables) {
-        this.messenger.emit('database_event', new DatabaseEvent(projectId, (new Date()).getTime() / 1000, DatabaseEventType.DELETE, insertable, collection));
+        this.messenger.emit('database_event', new DatabaseEvent(projectId, (new Date()).getTime() / 1000, 'DELETE', insertable, collection));
         (await this.connection.connection.useDb(projectId).collection(collection).deleteOne({
           _id: Types.ObjectId(insertable._id),
         }));
