@@ -9,5 +9,5 @@ FROM node:12-alpine
 ENV NODE_ENV production
 USER node
 WORKDIR /app
-COPY --from=builder /app/ /app/
+COPY --from=builder /home/node/ /app/
 CMD yarn start:prod
