@@ -35,13 +35,13 @@ export class DatabaseController {
 
   @Put(':collection')
   @ApiBody({ type: [ObjectDocument] })
-  async update(@Param('projectId') projectId: string, @Param('collection') collection: string, @Body() documents: [ObjectDocument]): Promise<Array<ObjectDocument>> {
+  async update(@Req() req: any, @Param('projectId') projectId: string, @Param('collection') collection: string, @Body() documents: [ObjectDocument]): Promise<Array<ObjectDocument>> {
     return this.databaseService.update(collection, documents, projectId, await this.getOwner(req));
   }
 
   @Delete(':collection')
   @ApiBody({ type: [ObjectDocument] })
-  async delete(@Param('projectId') projectId: string, @Param('collection') collection: string, @Body() documents: [ObjectDocument]): Promise<Array<ObjectDocument>> {
+  async delete(@Req() req: any, @Param('projectId') projectId: string, @Param('collection') collection: string, @Body() documents: [ObjectDocument]): Promise<Array<ObjectDocument>> {
     return this.databaseService.delete(collection, documents, projectId, await this.getOwner(req));
   }
 

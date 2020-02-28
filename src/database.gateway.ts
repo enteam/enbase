@@ -13,6 +13,7 @@ import { DatabaseEvent } from './events/database.event';
 import { remove } from 'lodash';
 import { OnModuleInit } from '@nestjs/common';
 import { ObjectId } from 'bson';
+import { JwtService } from '@nestjs/jwt';
 
 export class DatabaseSubscription {
   projectId: string;
@@ -67,9 +68,12 @@ export class DatabaseGateway implements OnGatewayDisconnect, OnModuleInit, OnGat
     this.subscriptions.forEach(async subscription => {
       // TODO implement auth validation
       if (subscription.projectId == event.projectId && subscription.type.toString() == event.type.toString() && subscription.collection == event.collection) {
-        const schema = (await this.getProject(projectId)).databaseSchema.collections.find(x => x.name == collection);
-        if (schema == null) throw new NotFoundException('collection not found');
-        subscription.socket.emit('database', event);
+        const schema = (await this.getProject(event.projectId)).databaseSchema.collections.find(x => x.name == event.collection);
+        if (schema != null) {
+          if (schema.publicReadAccesc) {
+            subscription.socket.emit('database', event);
+          }
+        }
       }
     });
   }
