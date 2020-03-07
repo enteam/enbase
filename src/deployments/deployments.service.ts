@@ -1,5 +1,5 @@
 import { Injectable, Inject, NotFoundException, OnModuleInit, Logger } from '@nestjs/common';
-import { Deployment, DeploymentDocument, DeploymentInstance } from '../interfaces/deployment.interface';
+import { Deployment, DeploymentDocument, DeploymentInstance, HookInstance } from '../interfaces/deployment.interface';
 import { Project, ProjectDocument } from '../interfaces/project.interface';
 import { AdminDocument } from '../interfaces/admin.interface';
 import { Model, Types, Document } from 'mongoose';
@@ -15,6 +15,7 @@ export class DeploymentsService implements OnModuleInit {
   private readonly logger = new Logger(DeploymentsService.name);
 
   static instances: Array<DeploymentInstance> = [];
+  static hooks: Array<HookInstance> = [];
 
   constructor(
     @Inject('PROJECT_MODEL')
@@ -96,7 +97,10 @@ export class DeploymentsService implements OnModuleInit {
   }
 
   private async mount(deployment: Deployment & Document, path: string): Promise<void> {
-    DeploymentsService.instances.splice(DeploymentsService.instances.indexOf(DeploymentsService.instances.find(x => x.projectId == deployment.projectId)), 1);
+    function defineHook(collection: string, handler: any, event: string) {
+      DeploymentsService.hooks.push(new HookInstance(handler, deployment.projectId, event, collection, deployment._id));
+    }
+
     // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
     // @ts-ignore
     global.Enbase = {
@@ -107,6 +111,7 @@ export class DeploymentsService implements OnModuleInit {
           instance.name = name;
           instance.type = 'function';
           instance.handler = handler;
+          instance.deploymentId = deployment._id;
           DeploymentsService.instances.push(instance);
         },
       },
@@ -117,10 +122,55 @@ export class DeploymentsService implements OnModuleInit {
           instance.name = name;
           instance.type = 'job';
           instance.handler = handler;
+          instance.deploymentId = deployment._id;
           DeploymentsService.instances.push(instance);
         },
       },
+      ref(collection: string) {
+        return {
+          beforeSave(handler) {
+            return defineHook(collection, handler, 'beforeSave');
+          },
+          afterSave(handler) {
+            return defineHook(collection, handler, 'afterSave');
+          },
+
+          beforeRead(handler) {
+            return defineHook(collection, handler, 'beforeRead');
+          },
+          afterRead(handler) {
+            return defineHook(collection, handler, 'afterRead');
+          },
+
+          beforeInsert(handler) {
+            return defineHook(collection, handler, 'beforeInsert');
+          },
+          afterInsert(handler) {
+            return defineHook(collection, handler, 'afterInsert');
+          },
+
+          beforeUpdate(handler) {
+            return defineHook(collection, handler, 'beforeUpdate');
+          },
+          afterUpdate(handler) {
+            return defineHook(collection, handler, 'afterUpdate');
+          },
+
+          beforeDelete(handler) {
+            return defineHook(collection, handler, 'beforeDelete');
+          },
+          afterDelete(handler) {
+            return defineHook(collection, handler, 'afterDelete');
+          },
+        };
+      },
     };
+    for (const instance of DeploymentsService.instances.filter(x => x.projectId == deployment.projectId && x.deploymentId != deployment._id)) {
+      DeploymentsService.instances.splice(DeploymentsService.instances.indexOf(instance), 1);
+    }
+    for (const hook of DeploymentsService.hooks.filter(x => x.projectId == deployment.projectId && x.deploymentId != deployment._id)) {
+      DeploymentsService.hooks.splice(DeploymentsService.hooks.indexOf(hook), 1);
+    }
     this.clearRequireCache();
     require(path);
   }

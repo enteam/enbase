@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
   OnModuleInit,
+  forwardRef,
 } from '@nestjs/common';
 import { Model, Mongoose, Types } from 'mongoose';
 import { Project, ProjectDocument } from '../interfaces/project.interface';
@@ -15,10 +16,12 @@ import * as PubSub from 'node-redis-pubsub';
 import { DatabaseEvent } from '../events/database.event';
 import { ObjectId } from 'bson';
 import { DatabaseGateway } from '../database.gateway';
+import { DeploymentsService } from '../deployments/deployments.service';
+import { FunctionsService } from '../functions/functions.service';
 
 @Injectable()
 export class DatabaseService implements OnModuleInit {
-  constructor(@Inject('DATABASE_CONNECTION') private readonly connection: Mongoose, @Inject('PROJECT_MODEL') private readonly projectModel: Model<ProjectDocument>) {
+  constructor(@Inject('DATABASE_CONNECTION') private readonly connection: Mongoose, @Inject('PROJECT_MODEL') private readonly projectModel: Model<ProjectDocument>, @Inject(forwardRef(() => FunctionsService)) private readonly functionsService: FunctionsService) {
   }
 
   private messenger: any;
@@ -55,7 +58,19 @@ export class DatabaseService implements OnModuleInit {
       }
       doc = await iterator.next();
     }
-    return documents;
+    return Promise.all(documents.map(async x => {
+      for (const hook of DeploymentsService.hooks) {
+        if (hook.projectId == projectId && hook.collection == collection && hook.event == 'beforeRead') {
+          let value = hook.handler(this.functionsService.extendContext(projectId, {
+            document: x,
+          }));
+          if (value instanceof Promise)
+            value = await value;
+          x = value;
+        }
+      }
+      return x;
+    }));
   }
 
   async insert(collection: string, documents: [any], projectId: string, auth?: string): Promise<Array<ObjectDocument>> {

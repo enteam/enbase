@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Inject, OnModuleInit } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, OnModuleInit, forwardRef } from '@nestjs/common';
 import { DeploymentsService } from '../deployments/deployments.service';
 import { DatabaseService } from '../database/database.service';
 import { ProjectService } from '../project/project.service';
@@ -9,6 +9,7 @@ import { Model, Types, Document } from 'mongoose';
 export class FunctionsService implements OnModuleInit {
 
   constructor(
+    @Inject(forwardRef(() => DatabaseService))
     private readonly databaseService: DatabaseService,
     @Inject('PROJECT_MODEL') private readonly projectModel: Model<ProjectDocument>) {
   }
@@ -19,7 +20,7 @@ export class FunctionsService implements OnModuleInit {
     return await instance.handler(this.extendContext(projectId, context));
   }
 
-  private extendContext(projectId: string, context) {
+  public extendContext(projectId: string, context) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
     return {
